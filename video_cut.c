@@ -70,9 +70,79 @@ float battachary(float v1, float v2) {
     //return op batacharrya
 }
 
-int main() //fatla agregar los args que recibe el programa archivo de video entrada, archivo de salida txt
+//----------------------Corta el video en frame y los guarda en una carpeta--------------------------------
+
+
+void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_List* mod_frames_list) {
+    
+    // Creamos las carpetas para almacenar los frames originales y modificados
+    std::string orig_frames_folder = "_original_frames";
+    std::string mod_frames_folder = "_modified_frames";
+    
+    if (mkdir(orig_frames_folder.c_str(), 0777) == -1) {
+        std::cerr << "Error: " << strerror(errno) << std::endl;
+    }
+    if (mkdir(mod_frames_folder.c_str(), 0777) == -1) {
+        std::cerr << "Error: " << strerror(errno) << std::endl;
+    }
+    
+    cv::VideoCapture cap(videoPath);
+    if (!cap.isOpened()) {
+        std::cerr << "Error al abrir el archivo de video." << std::endl;
+        return;
+    }
+
+    int frame_index = 0;
+    cv::Mat frame, hsv_frame;
+    while (cap.read(frame)) {
+        // Guardamos el frame original en la carpeta correspondiente
+        std::string orig_frame_name = orig_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
+        cv::imwrite(orig_frame_name, frame);
+
+        // Guardamos el frame modificado en la carpeta correspondiente
+        
+        cv::cvtColor(frame, hsv_frame, cv::COLOR_BGR2HSV);
+        std::vector<cv::Mat> hsv_channels;
+        cv::split(hsv_frame, hsv_channels);
+        cv::normalize(hsv_channels[1], hsv_channels[1], 0, 255, cv::NORM_MINMAX);
+        cv::normalize(hsv_channels[2], hsv_channels[2], 0, 255, cv::NORM_MINMAX);
+        cv::merge(hsv_channels, hsv_frame);
+        
+       /* for (int i = 0; i < hsv_frame.rows; i++) {
+            for (int j = 0; j < hsv_frame.cols; j++) {
+                hsv_frame.at<cv::Vec3b>(i, j)[0] = hsv_frame.at<cv::Vec3b>(i, j)[0] * 255 / 180;
+                hsv_frame.at<cv::Vec3b>(i, j)[1] = hsv_frame.at<cv::Vec3b>(i, j)[1] * 255 / 255;
+                hsv_frame.at<cv::Vec3b>(i, j)[2] = hsv_frame.at<cv::Vec3b>(i, j)[2] * 255 / 255;
+            }
+        }*/
+        std::string mod_frame_name = mod_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
+        cv::imwrite(mod_frame_name, hsv_frame);
+
+        // Agregamos los frames a las listas correspondientes
+        struct frames* orig_frame = (struct frames*)malloc(sizeof(struct frames));
+        orig_frame->index = frame_index;
+        strcpy(orig_frame->name, orig_frame_name.c_str());
+        orig_frame->next_frame = NULL;
+        add_frame(orig_frames_list, orig_frame);
+
+        struct frames* mod_frame = (struct frames*)malloc(sizeof(struct frames));
+        mod_frame->index = frame_index;
+        strcpy(mod_frame->name, mod_frame_name.c_str());
+        mod_frame->next_frame = NULL;
+        add_frame(mod_frames_list, mod_frame);
+
+        frame_index++;
+    }
+     cap.release();
+}
+
+
+
+int main(int argc, char** argv) //fatla agregar los args que recibe el programa archivo de video entrada, archivo de salida txt
 {
-    Frame_List all_frames = NULL;
+    Frame_List normal_frame_list = NULL;
+    Frame_List modify_frame_list = NULL;
+
     Clip_List all_clips = NULL;
     Cut_List aall_cuts = NULL;
     
@@ -82,13 +152,8 @@ int main() //fatla agregar los args que recibe el programa archivo de video entr
 
     //Declarar aqui las variables restantes
 
-    /*Aca agregamos el codigo para cargar el video y cortarlo en frames.
-        tomar en cuenta que cada frame lo agregamos a la lista de frames all_frames
-        donde:  index: sera el valor de la variable count en el ciclo de creacion de frames
-                name: el nombre explicito que tiene el archivo 'ejemplo##.jpg'
-
-                add_frame(&all_frames,new_frame);
-    */
+  //Llama a la funcion para partir el video en frame
+    splitVideoToFrames(argv[1], &normal_frame_list, &modify_frame_list);
 
     /*En esta seccion leemos cada frame y lo convertimos a hsv para obtener los valores a utilizar para calcualar batthacharya
         recordemos que battacharya es la sumatoria de 2 variables, por lo que aca trabajamos con una posicion de la lista y la siguiente    
