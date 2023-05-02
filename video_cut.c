@@ -1,5 +1,12 @@
 #include <iostream>
+#include <string>
+#include <sys/stat.h>
 #include <opencv2/opencv.hpp>
+#include <sstream>
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 struct frames {
     int index;
@@ -137,6 +144,60 @@ void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_Lis
 }
 
 
+//-----------------------------------------Funcion para crear el txt de salida-------------------------------------------
+
+void saveParams(int start, int end){
+    FILE *fp;
+    fp = fopen("output/Output.txt", "a"); // Abrir el archivo en modo "a" para agregar información al final
+    if(fp == NULL){
+        printf("Error al abrir el archivo");
+        return;
+    }
+    fprintf(fp, "Se hizo un corte desde el frame: %d hasta el frame: %d\n", start, end); // Escribir los parámetros en una línea separados por un espacio y un salto de línea
+    fclose(fp); // Cerrar el archivo
+}
+
+//-----------------------------------------Funcion para unir los frames en un video---------------------------------------
+
+void createVideo(int initFrame, int endFrame, int width, int height, char* framesFolder) {
+    // Crear la carpeta de salida si no existe
+    mkdir("output", 0777);
+
+    // Crea el nombre del archivo de vídeo para la salida
+    char outputVideoName[50];
+    sprintf(outputVideoName, "output/Video%d-%d.avi", initFrame, endFrame);
+    
+     //Comienza a llenar el txt
+     saveParams(initFrame, endFrame);
+
+    // Abre el vídeo para comenzar a escribir en él
+    cv::VideoWriter outputVideo;
+    outputVideo.open(outputVideoName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(width, height), true);
+
+    // Recorre los frames y los añade al vídeo
+    for (int i = initFrame; i <= endFrame; i++) {
+        char frameName[50];
+        sprintf(frameName, "%s/%d.jpg", framesFolder, i);
+
+        // Carga los frame y si es necesario les cambia el tamaño
+        cv::Mat frame = cv::imread(frameName);
+        if (frame.cols != width || frame.rows != height) {
+            cv::resize(frame, frame, cv::Size(width, height));
+        }
+        
+
+        // Añade los frame al vídeo
+        outputVideo.write(frame);
+    }
+
+    // Libera memoria
+    outputVideo.release();
+
+    printf("Video guardado %s\n", outputVideoName);
+}
+
+
+
 
 int main(int argc, char** argv) //fatla agregar los args que recibe el programa archivo de video entrada, archivo de salida txt
 {
@@ -154,6 +215,9 @@ int main(int argc, char** argv) //fatla agregar los args que recibe el programa 
 
   //Llama a la funcion para partir el video en frame
     splitVideoToFrames(argv[1], &normal_frame_list, &modify_frame_list);
+
+   //Ejemplo de como irian los parametros del crear el video, esta función iria dentro de la función de cortar
+   // createVideo(1, 100, 1280, 720, "_original_frames");
 
     /*En esta seccion leemos cada frame y lo convertimos a hsv para obtener los valores a utilizar para calcualar batthacharya
         recordemos que battacharya es la sumatoria de 2 variables, por lo que aca trabajamos con una posicion de la lista y la siguiente    
