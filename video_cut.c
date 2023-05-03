@@ -16,9 +16,10 @@ struct frames {
 
 struct clips {
     int index;
-    char name[15];
+    char name[150];
+    int first_frame;
+    int last_frame;
     struct clips* next_clip;
-    struct frame* first_frame; 
 };
 
 struct cuts {
@@ -30,7 +31,9 @@ typedef struct frames* Frame_List;
 typedef struct clips* Clip_List;
 typedef struct cuts* Cut_List;
 
-void add_frame(Frame_List* list, frames* data) {
+/********************Agregar nuevo frame a la lista*********************************/
+
+void add_frame(Frame_List* list, struct frames* data) {
     if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
         *list = data;
     }
@@ -43,7 +46,9 @@ void add_frame(Frame_List* list, frames* data) {
     }
 }
 
-void add_cut(Cut_List* list, cuts* data) {
+/********************Agregar nuevo corte a la lista*********************************/
+
+void add_cut(Cut_List* list, struct cuts* data) {
     if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
         *list = data;
     }
@@ -56,7 +61,9 @@ void add_cut(Cut_List* list, cuts* data) {
     }
 }
 
-void add_clip(Clip_List* list, clips* data) {
+/********************Agregar nuevo clip a la lista*********************************/
+
+void add_clip(Clip_List* list, struct clips* data) {
     if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
         *list = data;
     }
@@ -69,30 +76,56 @@ void add_clip(Clip_List* list, clips* data) {
     }
 }
 
+/********************Ordenar lista de cortes*********************************/
+
 void sort_cuts(Cut_List* list) {
-    //ordenar la lista de menor a mayor con respecto al cut_frame
+    if (*list == NULL) {
+        return; // La lista está vacía
+    }
+
+    int change = 1;
+    while (change == 1) {
+        change = 0;
+        Cut_List ant = NULL;
+        Cut_List act = *list;
+        while (act->next_cut != NULL) {
+            if (act->cut_frame > act->next_cut->cut_frame) {
+                // Intercambiar los nodos
+                Cut_List sig = act->next_cut;
+                act->next_cut = sig->next_cut;
+                sig->next_cut = act;
+                if (ant == NULL) {
+                    *list = sig;
+                }
+                else {
+                    ant->next_cut = sig;
+                }
+                ant = sig;
+                change = 1;
+            }
+            else {
+                ant = act;
+                act = act->next_cut;
+            }
+        }
+    }
 }
 
-float battachary(float v1, float v2) {
-    //return op batacharrya
-}
-
-//----------------------Corta el video en frame y los guarda en una carpeta--------------------------------
-
+/********************Division de video en frames*********************************/
 
 void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_List* mod_frames_list) {
-    
+
     // Creamos las carpetas para almacenar los frames originales y modificados
     std::string orig_frames_folder = "_original_frames";
     std::string mod_frames_folder = "_modified_frames";
-    
+
     if (mkdir(orig_frames_folder.c_str(), 0777) == -1) {
         std::cerr << "Error: " << strerror(errno) << std::endl;
     }
     if (mkdir(mod_frames_folder.c_str(), 0777) == -1) {
         std::cerr << "Error: " << strerror(errno) << std::endl;
     }
-    
+
     cv::VideoCapture cap(videoPath);
     if (!cap.isOpened()) {
         std::cerr << "Error al abrir el archivo de video." << std::endl;
@@ -107,21 +140,22 @@ void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_Lis
         cv::imwrite(orig_frame_name, frame);
 
         // Guardamos el frame modificado en la carpeta correspondiente
-        
+
         cv::cvtColor(frame, hsv_frame, cv::COLOR_BGR2HSV);
         std::vector<cv::Mat> hsv_channels;
         cv::split(hsv_frame, hsv_channels);
+        cv::normalize(hsv_channels[0], hsv_channels[0], 0, 255, cv::NORM_MINMAX);
         cv::normalize(hsv_channels[1], hsv_channels[1], 0, 255, cv::NORM_MINMAX);
         cv::normalize(hsv_channels[2], hsv_channels[2], 0, 255, cv::NORM_MINMAX);
         cv::merge(hsv_channels, hsv_frame);
-        
-       /* for (int i = 0; i < hsv_frame.rows; i++) {
-            for (int j = 0; j < hsv_frame.cols; j++) {
-                hsv_frame.at<cv::Vec3b>(i, j)[0] = hsv_frame.at<cv::Vec3b>(i, j)[0] * 255 / 180;
-                hsv_frame.at<cv::Vec3b>(i, j)[1] = hsv_frame.at<cv::Vec3b>(i, j)[1] * 255 / 255;
-                hsv_frame.at<cv::Vec3b>(i, j)[2] = hsv_frame.at<cv::Vec3b>(i, j)[2] * 255 / 255;
-            }
-        }*/
+
+        /* for (int i = 0; i < hsv_frame.rows; i++) {
+             for (int j = 0; j < hsv_frame.cols; j++) {
+                 hsv_frame.at<cv::Vec3b>(i, j)[0] = hsv_frame.at<cv::Vec3b>(i, j)[0] * 255 / 180;
+                 hsv_frame.at<cv::Vec3b>(i, j)[1] = hsv_frame.at<cv::Vec3b>(i, j)[1] * 255 / 255;
+                 hsv_frame.at<cv::Vec3b>(i, j)[2] = hsv_frame.at<cv::Vec3b>(i, j)[2] * 255 / 255;
+             }
+         }*/
         std::string mod_frame_name = mod_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
         cv::imwrite(mod_frame_name, hsv_frame);
 
@@ -140,16 +174,16 @@ void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_Lis
 
         frame_index++;
     }
-     cap.release();
+    cap.release();
+    printf("Video divido \n");
 }
 
+/******************Creacion del archivo txt de salida*************************/
 
-//-----------------------------------------Funcion para crear el txt de salida-------------------------------------------
-
-void saveParams(int start, int end){
-    FILE *fp;
+void saveParams(int start, int end) {
+    FILE* fp;
     fp = fopen("output/Output.txt", "a"); // Abrir el archivo en modo "a" para agregar información al final
-    if(fp == NULL){
+    if (fp == NULL) {
         printf("Error al abrir el archivo");
         return;
     }
@@ -157,34 +191,35 @@ void saveParams(int start, int end){
     fclose(fp); // Cerrar el archivo
 }
 
-//-----------------------------------------Funcion para unir los frames en un video---------------------------------------
+/******************Creacion de clips a partir de frames************************/
 
-void createVideo(int initFrame, int endFrame, int width, int height, char* framesFolder) {
+void createVideo(Clip_List temp_clip, int width, int height) {
+    //int initFrame, int endFrame, int width, int height, char* framesFolder) {
     // Crear la carpeta de salida si no existe
     mkdir("output", 0777);
 
     // Crea el nombre del archivo de vídeo para la salida
     char outputVideoName[50];
-    sprintf(outputVideoName, "output/Video%d-%d.avi", initFrame, endFrame);
-    
-     //Comienza a llenar el txt
-     saveParams(initFrame, endFrame);
+    sprintf(outputVideoName, "output/%s", temp_clip->name);
+
+    //Comienza a llenar el txt
+    saveParams(temp_clip->first_frame, temp_clip->last_frame);
 
     // Abre el vídeo para comenzar a escribir en él
     cv::VideoWriter outputVideo;
     outputVideo.open(outputVideoName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(width, height), true);
 
     // Recorre los frames y los añade al vídeo
-    for (int i = initFrame; i <= endFrame; i++) {
+    for (int i = temp_clip->first_frame; i <= temp_clip->last_frame; i++) {
         char frameName[50];
-        sprintf(frameName, "%s/%d.jpg", framesFolder, i);
+        sprintf(frameName, "_original_frames/%d.jpg", i);
 
         // Carga los frame y si es necesario les cambia el tamaño
         cv::Mat frame = cv::imread(frameName);
         if (frame.cols != width || frame.rows != height) {
             cv::resize(frame, frame, cv::Size(width, height));
         }
-        
+
 
         // Añade los frame al vídeo
         outputVideo.write(frame);
@@ -196,81 +231,108 @@ void createVideo(int initFrame, int endFrame, int width, int height, char* frame
     printf("Video guardado %s\n", outputVideoName);
 }
 
-
-
-
 int main(int argc, char** argv) //fatla agregar los args que recibe el programa archivo de video entrada, archivo de salida txt
 {
     Frame_List normal_frame_list = NULL;
     Frame_List modify_frame_list = NULL;
+    Frame_List temp_frame = NULL;
 
     Clip_List all_clips = NULL;
-    Cut_List aall_cuts = NULL;
+    Clip_List temp_clips = NULL;
+
+    Cut_List all_cuts = NULL;
+    Cut_List temp_cut = NULL;
+
+    struct frames* new_frame = (struct frames*)malloc(sizeof(struct frames));;
+    struct clips* new_clip = (struct clips*)malloc(sizeof(struct clips));;
+    struct cuts* new_cut= (struct cuts*)malloc(sizeof(struct cuts));
+
+
+    int first_frame = 0, index = 0, temp_index = 0;
+
+    char frameName1[50];
+    char frameName2[50];
     
-    frames new_frame;
-    clips new_clip;
-    cuts new_cut;
+    int h_bins = 200, s_bins = 200;
+    int histSize[] = { h_bins, s_bins };
+    float h_ranges[] = { 0, 180 };
+    float s_ranges[] = { 0, 255 };
+    const float* ranges[] = { h_ranges, s_ranges };
+    int channels[] = { 0, 1 };
+    double btchr;
 
-    //Declarar aqui las variables restantes
-
-  //Llama a la funcion para partir el video en frame
+    //Llama a la funcion para partir el video en frame agregar if rank=0 paralelizado
     splitVideoToFrames(argv[1], &normal_frame_list, &modify_frame_list);
 
-   //Ejemplo de como irian los parametros del crear el video, esta función iria dentro de la función de cortar
-   // createVideo(1, 100, 1280, 720, "_original_frames");
+    // Calcula y normaliza los histograma para frames continuos y establece umbral de corte
+     
+    temp_frame = modify_frame_list;
+     
 
-    /*En esta seccion leemos cada frame y lo convertimos a hsv para obtener los valores a utilizar para calcualar batthacharya
-        recordemos que battacharya es la sumatoria de 2 variables, por lo que aca trabajamos con una posicion de la lista y la siguiente    
-        Luego de calculada el bataccharya de 2 frames continuos tenemos que agregar el condicional para determinar si es un frame de corte
-            de ser frame de corte hay que agregarlo a la lista all_cuts donde:
-                cut_frame: es el index del frame actual
-                next_cut: seria null
+    while (temp_frame->next_frame != NULL) {
+    
+        
+        sprintf(frameName1, "_modified_frames/%d.jpg", temp_frame->index);
+        sprintf(frameName2, "_modified_frames/%d.jpg", temp_frame->next_frame->index);
+        
 
-                for(int i = 0 , i < width, i++)
-                    for(int j = 0, j < heigth, j++)
-                        valor hsv para img1, img2
+        
+        cv::Mat img1 = cv::imread(frameName1);
+        cv::Mat img2 = cv::imread(frameName2);
+    
+        
+        cv::MatND hist1, hist2;
 
-                        img1: frame actual 
-                        img2: frame siguiente
+        
+        cv::calcHist(&img1, 1, channels, cv::Mat(), hist1, 2, histSize, ranges, true, false);
+        cv::calcHist(&img2, 1, channels, cv::Mat(), hist2, 2, histSize, ranges, true, false);
+        
 
-                sum_batt=sum_batt + batacharrya (im1, im2)
+        cv::normalize(hist1, hist1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
+        cv::normalize(hist2, hist2, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
 
-        En la version paralelizada agregar codigo para que todos los procesos envien su lista de cuts a un proceso X
-        este los una y los ordene de menor a mayor con respecto a la variable  cut_frame y lo envie de vuelta a todos los procs
-    */
+        btchr = cv::compareHist(hist1, hist2, cv::HISTCMP_BHATTACHARYYA);
+        
+          
+        
+        if (btchr > 0.6) { 
+            new_cut->cut_frame = temp_frame->index;
+            new_cut->next_cut = NULL;
+            add_cut(&all_cuts, new_cut);
+        }
+        temp_frame = temp_frame->next_frame;
+    }
 
-    /*Continuamos con la reconstruccion de los clips, ya con la lista all_cuts ordenada se procede a la regeneracion de los clips
-        mientras se genera el clip ir aregandolos a la lista all_clips
-        (aca debemos idear un algoritmo para poder implementar paralelizacion en la regeneracion de clips)
-            incluir una varible o un metodo para poder dividir la cantidad de cuts entre los procesos y cada proc
-            vaya generando los clips
+    //sort_cuts(&all_cuts);
+    
+ 
+    temp_cut = all_cuts;
+    index = 0;
+    temp_index = 0;
+   
+    
+    while (temp_cut !=NULL) {
+        printf("Algo");
+        new_clip->first_frame = temp_index;
+        new_clip->last_frame = temp_cut->cut_frame;
+        new_clip->index = index;
+        sprintf(new_clip->name, "Video_%d-%d.mp4", new_clip->first_frame, new_clip->last_frame);
+        new_clip->next_clip = NULL;
+        add_clip(&all_clips, new_clip);
+        index++;
+        temp_index = temp_cut->cut_frame;
+        temp_cut = temp_cut->next_cut;
+    }
 
-            contador cuts = 0
-            Cut_list  total_cuts = all_cuts
-            while(total_cuts != NULL){
-                cuts++
-                total_cuts = total_cuts -> next_cut
-            }
+    temp_clips = all_clips;
+     
 
-            sort_clips(&all_clips) enviarlo a los demas procesos 
+    char frameName[50];
+    sprintf(frameName, "_original_frames/%d.jpg", normal_frame_list->name);
+    cv::Mat img = cv::imread(frameName, cv::IMREAD_COLOR);
 
-            part_size = cuts / size
-            my_first = rank * part_size
-            my_last = (rank + 1) * part_size
-
-            if(rank = size-1)
-                my_last = cuts
-
-
-    */
-
-    /*dar formato al archivo de salida imprimiendo lo que pide el proyecto
-    * cantidad de clips y los frames que abarca....
-    * El video tiene un total de ### clips divididos de la siguiente forma
-    * 
-    *   Clip #:
-    *       
-    */
-
-
+    while (temp_clips != NULL) {
+        createVideo(temp_clips, img.cols, img.rows);
+        temp_clips = temp_clips->next_clip;
+    }
 }
