@@ -327,3 +327,87 @@ int main(int argc, char** argv) //fatla agregar los args que recibe el programa 
         temp_clips = temp_clips->next_clip;
     }
 }
+{
+    Frame_List normal_frame_list = NULL;
+    Frame_List modify_frame_list = NULL;
+    Frame_List temp_frame = NULL;
+
+    Clip_List all_clips = NULL;
+    Clip_List temp_clips = NULL;
+
+    Cut_List all_cuts = NULL;
+    Cut_List temp_cut = NULL;
+
+    struct frames* new_frame;
+    struct clips* new_clip;
+    struct cuts* new_cut;
+
+    double bch = 0, bcs = 0, bcv = 0;
+    int first_frame = 0, index = 0, temp_index = 0;
+
+    //Llama a la funcion para partir el video en frame agregar if rank=0 paralelizado
+    splitVideoToFrames(argv[1], &normal_frame_list, &modify_frame_list);
+
+    temp_frame = modify_frame_list;
+
+    while (temp_frame->next_frame != NULL) {
+        bch = 0, bcs = 0, bcv = 0;
+        double h1, h2, s1, s2, v1, v2;
+        char frameName1[50];
+        char frameName2[50];
+        sprintf(frameName1, "_original_frames/%d.jpg", temp_frame->name);
+        sprintf(frameName2, "_original_frames/%d.jpg", temp_frame->next_frame->name);
+        cv::Mat img1 = cv::imread(frameName1, cv::IMREAD_COLOR);
+        cv::Mat img2 = cv::imread(frameName2, cv::IMREAD_COLOR);
+        for (int i = 0; i < img1.cols; i++) {
+            for (int j = 0; j < img1.rows; i++) {
+                cv::Vec3b hsv_value1 = img1.at<cv::Vec3b>(i, j);
+                cv::Vec3b hsv_value2 = img2.at<cv::Vec3b>(i, j);
+                h1 = hsv_value1[0];
+                s1 = hsv_value1[1];
+                v1 = hsv_value1[2];
+                h2 = hsv_value2[0];
+                s2 = hsv_value2[1];
+                v2 = hsv_value2[2];
+                bch += bhattacharyya(h1, h2);
+                bcs += bhattacharyya(s1, s2);
+                bcv += bhattacharyya(v1, v2);
+            }
+        }
+        if ((bch < 10) || (bcs < 10) || (bcv < 10)) {
+            new_cut->cut_frame = temp_frame->index;
+            new_cut->next_cut = NULL;
+            add_cut(&all_cuts, new_cut);
+        }
+        temp_frame = temp_frame->next_frame;
+    }
+
+    sort_cuts(&all_cuts);
+
+    temp_cut = all_cuts;
+    index = 0;
+    temp_index = 0;
+
+    while (temp_cut !=NULL) {
+        new_clip->first_frame = temp_index;
+        new_clip->last_frame = temp_cut->cut_frame;
+        new_clip->index = index;
+        sprintf(new_clip->name, "Video_%d-%d.mp4", new_clip->first_frame, new_clip->last_frame);
+        new_clip->next_clip = NULL;
+        add_clip(&all_clips, new_clip);
+        index++;
+        temp_index = temp_cut->cut_frame;
+        temp_cut = temp_cut->next_cut;
+    }
+
+    temp_clips = all_clips;
+
+    char frameName[50];
+    sprintf(frameName, "_original_frames/%d.jpg", normal_frame_list->name);
+    cv::Mat img = cv::imread(frameName, cv::IMREAD_COLOR);
+
+    while (temp_clips != NULL) {
+        createVideo(temp_clips, img.cols, img.rows);
+        temp_clips = temp_clips->next_clip;
+    }
+}
