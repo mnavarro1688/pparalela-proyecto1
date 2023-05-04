@@ -6,20 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <list>
 #include <unistd.h>
 #include <time.h>
 #include <mpi.h>
 #include <vector>
-#include <nlohmann/json.hpp>
-
-using json = nlohmann::json;
-
-class clips {
-public:
-    int ini,fin;
-    clips(int ini,int fin) : ini(ini), fin(fin){}
-};
 
 /***********************************Save text*********************************/
 
@@ -86,34 +76,6 @@ void createVideo(int ini, int end, int width, int height) {
 
     // Libera memoria
     outputVideo.release();
-
-    printf("Video guardado %s\n", outputVideoName);
-}
-
-/*********************Funcion para serializar la lista de clips****************/
-
-std::string serializarLista(std::list<clips>& lista) {
-    json j;
-    for (auto& objeto : lista) {
-        j.push_back({
-            {"ini", objeto.ini},
-            {"fin", objeto.fin}
-        });
-    }
-    return j.dump();
-}
-
-/*********************Funcion para deserializar la lista de clips****************/
-
-std::list<clips> deserializarLista(std::string jsonStr) {
-    std::list<clips> lista;
-    json j = json::parse(jsonStr);
-    for (auto& objeto : j) {
-        int ini = objeto["ini"];
-        int fin = objeto["fin"];
-        lista.emplace_back(ini, fin);
-    }
-    return lista;
 }
 
 /************************************* Main ***************************************/
@@ -125,9 +87,8 @@ int main(int argc, char** argv){
     inicio = clock();
 
     char resolucion[20];
-    int size, rank, num_proc;
-    double start_time, end_time, time_final;
-    int my_first, my_last, n_frames,n_cuts, part_size;
+    int size, rank;
+    int my_first, my_last, n_frames, part_size;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -139,7 +100,6 @@ int main(int argc, char** argv){
     std::vector<int> temp_cuts;
     std::vector<int> clips_ini;
     std::vector<int> clips_fin;
-    //std::vector<clips> clips_list;
 
     int h_bins = 200, s_bins = 200;
     int histSize[] = { h_bins, s_bins };
@@ -147,9 +107,8 @@ int main(int argc, char** argv){
     float s_ranges[] = { 0, 256 };
     const float* ranges[] = { h_ranges, s_ranges };
     int channels[] = { 0, 1 };
-    double btchr;
 
-    clips new_clip = clips(0,0);
+    double btchr;
 
     char frameName1[50];
     char frameName2[50];
@@ -243,15 +202,15 @@ int main(int argc, char** argv){
         cv::normalize(hist2, hist2, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
 
         btchr = cv::compareHist(hist1, hist2, cv::HISTCMP_BHATTACHARYYA);
-        printf("bthcr : %f ---- %s \n", btchr, frameName2);
+        
         if (btchr > 0.6) {
             cuts.push_back(mod_frames[i]);    
         }
     }
 
-    /******************Unificacion de lista con frames de corte en el proceso 0*************/
+    /******************Unificacion de vectores con frames de corte en el proceso 0*************/
 
-   temp_cuts = cuts;
+    temp_cuts = cuts;
     
     std::vector<int> send_counts(size);
     int temp_cuts_size = temp_cuts.size();
@@ -273,16 +232,15 @@ int main(int argc, char** argv){
     /*****************Rellena la lista de clips para generar los videos*********************/
 
     vec_size = cuts.size();
+    std::sort(cuts.begin(), cuts.end());
 
     for(int i = 0; i < vec_size; i++){
-        //clips_list.push_back(clips(ini, cuts[i]));
         clips_ini.push_back(ini);
         clips_fin.push_back(cuts[i]);
         ini = cuts[i];
     }
 
     if (ini < original_frames.back()){
-        //clips_list.push_back(clips(ini,original_frames.back()));
         clips_ini.push_back(ini);
         clips_fin.push_back(original_frames.back());
     }
@@ -324,12 +282,12 @@ int main(int argc, char** argv){
     fin = clock();
     tiempo = ((double) (fin - inicio)) / CLOCKS_PER_SEC;
    
-    //double tiempo serial, double tiempo paralelo, int numero de procesos, char resolucion
     if(rank==0){
         txtSpeedup(2.0, tiempo, rank, resolucion);
     }
-   
-    
 
     MPI_Finalize();
+
+    printf("El programa finalizo correctamente");
+
 } 

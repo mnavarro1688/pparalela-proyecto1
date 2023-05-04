@@ -83,10 +83,7 @@ void createVideo(int ini, int end, int width, int height) {
     // Libera memoria
     outputVideo.release();
 
-    printf("Video guardado %s\n", outputVideoName);
 }
-
-
 
 int main(int argc, char** argv){
 
@@ -106,6 +103,7 @@ int main(int argc, char** argv){
     float s_ranges[] = { 0, 256 };
     const float* ranges[] = { h_ranges, s_ranges };
     int channels[] = { 0, 1 };
+
     double btchr;
 
     clips new_clip = clips(0,0);
@@ -179,7 +177,7 @@ int main(int argc, char** argv){
         cv::normalize(hist2, hist2, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
 
         btchr = cv::compareHist(hist1, hist2, cv::HISTCMP_BHATTACHARYYA);
-        printf("bthcr : %f ---- %s \n", btchr, frameName2);
+       
         if (btchr > 0.6) {
             cuts.push_back(frame1);    
         }
@@ -190,7 +188,7 @@ int main(int argc, char** argv){
     while (it2 != cuts.end()) {
         int frame = *it2;
         clips_list.push_back(clips(ini, frame));
-        ini = frame;
+        ini = frame + 1;
         ++it2;
     }
 
@@ -208,5 +206,7 @@ int main(int argc, char** argv){
     tiempo = ((double) (fin - inicio)) / CLOCKS_PER_SEC;
     //double tiempo serial, double tiempo paralelo, int numero de procesos, char resolucion
     txtSpeedup(tiempo, tiempo, 1, resolucion);
+
+    printf("El programa finalizo correctamente");
     
 } 
