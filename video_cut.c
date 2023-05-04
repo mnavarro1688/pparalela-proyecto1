@@ -1,5 +1,4 @@
 #include <iostream>
-#include <string>
 #include <sys/stat.h>
 #include <opencv2/opencv.hpp>
 #include <sstream>
@@ -7,178 +6,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <list>
+#include <unistd.h>
+#include <time.h>
 
-struct frames {
-    int index;
-    char name[15];
-    struct frames* next_frame;
+class clips {
+public:
+    int ini,fin;
+    clips(int ini,int fin) : ini(ini), fin(fin){}
 };
 
-struct clips {
-    int index;
-    char name[150];
-    int first_frame;
-    int last_frame;
-    struct clips* next_clip;
-};
-
-struct cuts {
-    int cut_frame;
-    struct cuts* next_cut;
-};
-
-typedef struct frames* Frame_List;
-typedef struct clips* Clip_List;
-typedef struct cuts* Cut_List;
-
-/********************Agregar nuevo frame a la lista*********************************/
-
-void add_frame(Frame_List* list, struct frames* data) {
-    if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
-        *list = data;
-    }
-    else { // Si la lista no está vacía, agregar el nuevo nodo al final
-        struct frames* last_frame = *list;
-        while (last_frame->next_frame != NULL) {
-            last_frame = last_frame->next_frame;
-        }
-        last_frame->next_frame = data;
-    }
-}
-
-/********************Agregar nuevo corte a la lista*********************************/
-
-void add_cut(Cut_List* list, struct cuts* data) {
-    if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
-        *list = data;
-    }
-    else { // Si la lista no está vacía, agregar el nuevo nodo al final
-        struct cuts* last_cut = *list;
-        while (last_cut->next_cut != NULL) {
-            last_cut = last_cut->next_cut;
-        }
-        last_cut->next_cut = data;
-    }
-}
-
-/********************Agregar nuevo clip a la lista*********************************/
-
-void add_clip(Clip_List* list, struct clips* data) {
-    if (*list == NULL) { // Si la lista está vacía, el nuevo nodo es el primero
-        *list = data;
-    }
-    else { // Si la lista no está vacía, agregar el nuevo nodo al final
-        struct clips* last_clip = *list;
-        while (last_clip->next_clip != NULL) {
-            last_clip = last_clip->next_clip;
-        }
-        last_clip->next_clip = data;
-    }
-}
-
-/********************Ordenar lista de cortes*********************************/
-
-void sort_cuts(Cut_List* list) {
-    if (*list == NULL) {
-        return; // La lista está vacía
-    }
-
-    int change = 1;
-    while (change == 1) {
-        change = 0;
-        Cut_List ant = NULL;
-        Cut_List act = *list;
-        while (act->next_cut != NULL) {
-            if (act->cut_frame > act->next_cut->cut_frame) {
-                // Intercambiar los nodos
-                Cut_List sig = act->next_cut;
-                act->next_cut = sig->next_cut;
-                sig->next_cut = act;
-                if (ant == NULL) {
-                    *list = sig;
-                }
-                else {
-                    ant->next_cut = sig;
-                }
-                ant = sig;
-                change = 1;
-            }
-            else {
-                ant = act;
-                act = act->next_cut;
-            }
-        }
-    }
-}
-
-/********************Division de video en frames*********************************/
-
-void splitVideoToFrames(char* videoPath, Frame_List* orig_frames_list, Frame_List* mod_frames_list) {
-
-    // Creamos las carpetas para almacenar los frames originales y modificados
-    std::string orig_frames_folder = "_original_frames";
-    std::string mod_frames_folder = "_modified_frames";
-
-    if (mkdir(orig_frames_folder.c_str(), 0777) == -1) {
-        std::cerr << "Error: " << strerror(errno) << std::endl;
-    }
-    if (mkdir(mod_frames_folder.c_str(), 0777) == -1) {
-        std::cerr << "Error: " << strerror(errno) << std::endl;
-    }
-
-    cv::VideoCapture cap(videoPath);
-    if (!cap.isOpened()) {
-        std::cerr << "Error al abrir el archivo de video." << std::endl;
-        return;
-    }
-
-    int frame_index = 0;
-    cv::Mat frame, hsv_frame;
-    while (cap.read(frame)) {
-        // Guardamos el frame original en la carpeta correspondiente
-        std::string orig_frame_name = orig_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
-        cv::imwrite(orig_frame_name, frame);
-
-        // Guardamos el frame modificado en la carpeta correspondiente
-
-        cv::cvtColor(frame, hsv_frame, cv::COLOR_BGR2HSV);
-        std::vector<cv::Mat> hsv_channels;
-        cv::split(hsv_frame, hsv_channels);
-        cv::normalize(hsv_channels[0], hsv_channels[0], 0, 255, cv::NORM_MINMAX);
-        cv::normalize(hsv_channels[1], hsv_channels[1], 0, 255, cv::NORM_MINMAX);
-        cv::normalize(hsv_channels[2], hsv_channels[2], 0, 255, cv::NORM_MINMAX);
-        cv::merge(hsv_channels, hsv_frame);
-
-        /* for (int i = 0; i < hsv_frame.rows; i++) {
-             for (int j = 0; j < hsv_frame.cols; j++) {
-                 hsv_frame.at<cv::Vec3b>(i, j)[0] = hsv_frame.at<cv::Vec3b>(i, j)[0] * 255 / 180;
-                 hsv_frame.at<cv::Vec3b>(i, j)[1] = hsv_frame.at<cv::Vec3b>(i, j)[1] * 255 / 255;
-                 hsv_frame.at<cv::Vec3b>(i, j)[2] = hsv_frame.at<cv::Vec3b>(i, j)[2] * 255 / 255;
-             }
-         }*/
-        std::string mod_frame_name = mod_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
-        cv::imwrite(mod_frame_name, hsv_frame);
-
-        // Agregamos los frames a las listas correspondientes
-        struct frames* orig_frame = (struct frames*)malloc(sizeof(struct frames));
-        orig_frame->index = frame_index;
-        strcpy(orig_frame->name, orig_frame_name.c_str());
-        orig_frame->next_frame = NULL;
-        add_frame(orig_frames_list, orig_frame);
-
-        struct frames* mod_frame = (struct frames*)malloc(sizeof(struct frames));
-        mod_frame->index = frame_index;
-        strcpy(mod_frame->name, mod_frame_name.c_str());
-        mod_frame->next_frame = NULL;
-        add_frame(mod_frames_list, mod_frame);
-
-        frame_index++;
-    }
-    cap.release();
-    printf("Video divido \n");
-}
-
-/******************Creacion del archivo txt de salida*************************/
+/***********************************Save text*********************************/
 
 void saveParams(int start, int end) {
     FILE* fp;
@@ -191,26 +29,61 @@ void saveParams(int start, int end) {
     fclose(fp); // Cerrar el archivo
 }
 
-/******************Creacion de clips a partir de frames************************/
+/***********************************Save speedup*********************************/
 
-void createVideo(Clip_List temp_clip, int width, int height) {
-    //int initFrame, int endFrame, int width, int height, char* framesFolder) {
+void txtSpeedup(double tserial, double tparalelo, int nproceso, char resulucion[]){
+  char *file_path = "datos.txt";
+  double speedup= tserial/tparalelo;
+  char guardar[100];
+  char nspeed[20], nproc[20],nresol[20];
+  sprintf(guardar, "%f\t\t%d\t\t%s",speedup, nproceso, resulucion);
+   FILE *archivo_original, *archivo_editado;
+  if( access( file_path, F_OK ) != -1 ) {
+    char linea[100];
+    archivo_original = fopen("datos.txt", "r");
+    archivo_editado = fopen("datos_editado.txt", "w");
+       
+    while(fgets(linea, 100, archivo_original) != NULL) {
+      // Editar línea
+      sscanf(linea, "%[^ ],%[^ ],%[^]", nspeed, nproc, nresol);
+      if (nresol!=resulucion){
+        fprintf(archivo_editado, "%s",' ');
+      }
+      fprintf(archivo_editado, "%s", linea);
+    }
+    fprintf(archivo_editado,"%s",guardar);
+    fclose(archivo_original);
+    fclose(archivo_editado);
+    remove("datos.txt");
+    rename("datos_editado.txt", "datos.txt");
+  } else {
+    char encabezado[100]="Speedup\t\tProcesos\t\tResolucion";
+    archivo_original = fopen("datos.txt", "w");
+    fprintf(archivo_original,"%s",encabezado);
+    fprintf(archivo_original,"%s",guardar);
+  }
+}
+
+
+/***************************Creacion de clips**********************************/
+
+void createVideo(int ini, int end, int width, int height) {
     // Crear la carpeta de salida si no existe
     mkdir("output", 0777);
 
     // Crea el nombre del archivo de vídeo para la salida
     char outputVideoName[50];
-    sprintf(outputVideoName, "output/%s", temp_clip->name);
+    sprintf(outputVideoName, "output/Video%d-%d.avi", ini,end);
 
     //Comienza a llenar el txt
-    saveParams(temp_clip->first_frame, temp_clip->last_frame);
+    saveParams(ini, end);
 
     // Abre el vídeo para comenzar a escribir en él
     cv::VideoWriter outputVideo;
     outputVideo.open(outputVideoName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(width, height), true);
 
     // Recorre los frames y los añade al vídeo
-    for (int i = temp_clip->first_frame; i <= temp_clip->last_frame; i++) {
+    for (int i = ini; i <= end; i++) {
         char frameName[50];
         sprintf(frameName, "_original_frames/%d.jpg", i);
 
@@ -231,108 +104,127 @@ void createVideo(Clip_List temp_clip, int width, int height) {
     printf("Video guardado %s\n", outputVideoName);
 }
 
-int main(int argc, char** argv) //fatla agregar los args que recibe el programa archivo de video entrada, archivo de salida txt
-{
-    Frame_List normal_frame_list = NULL;
-    Frame_List modify_frame_list = NULL;
-    Frame_List temp_frame = NULL;
-
-    Clip_List all_clips = NULL;
-    Clip_List temp_clips = NULL;
-
-    Cut_List all_cuts = NULL;
-    Cut_List temp_cut = NULL;
-
-    struct frames* new_frame = (struct frames*)malloc(sizeof(struct frames));;
-    struct clips* new_clip = (struct clips*)malloc(sizeof(struct clips));;
-    struct cuts* new_cut= (struct cuts*)malloc(sizeof(struct cuts));
 
 
-    int first_frame = 0, index = 0, temp_index = 0;
+int main(int argc, char** argv){
 
-    char frameName1[50];
-    char frameName2[50];
-    
+    clock_t inicio, fin;
+    double tiempo;
+
+    inicio = clock();
+
+    std::list<int> original_frames;
+    std::list<int> mod_frames;
+    std::list<int> cuts;
+    std::list<clips> clips_list;
+
     int h_bins = 200, s_bins = 200;
     int histSize[] = { h_bins, s_bins };
     float h_ranges[] = { 0, 180 };
-    float s_ranges[] = { 0, 255 };
+    float s_ranges[] = { 0, 256 };
     const float* ranges[] = { h_ranges, s_ranges };
     int channels[] = { 0, 1 };
     double btchr;
 
-    //Llama a la funcion para partir el video en frame agregar if rank=0 paralelizado
-    splitVideoToFrames(argv[1], &normal_frame_list, &modify_frame_list);
+    clips new_clip = clips(0,0);
 
-    // Calcula y normaliza los histograma para frames continuos y establece umbral de corte
-     
-    temp_frame = modify_frame_list;
-     
+    char frameName1[50];
+    char frameName2[50];
 
-    while (temp_frame->next_frame != NULL) {
+    int ini = 0;
+
     
-        
-        sprintf(frameName1, "_modified_frames/%d.jpg", temp_frame->index);
-        sprintf(frameName2, "_modified_frames/%d.jpg", temp_frame->next_frame->index);
-        
+    std::string orig_frames_folder = "_original_frames";
+    std::string mod_frames_folder = "_modified_frames";
 
-        
-        cv::Mat img1 = cv::imread(frameName1);
-        cv::Mat img2 = cv::imread(frameName2);
+    mkdir(orig_frames_folder.c_str(), 0777);
+    mkdir(mod_frames_folder.c_str(), 0777);
+
+    cv::VideoCapture cap(argv[1]);
+    if (!cap.isOpened()) {
+        std::cerr << "Error al abrir el archivo de video." << std::endl;
+    }
+
+    int ancho = (int) cap.get(cv::CAP_PROP_FRAME_WIDTH); // obtener la anchura de los cuadros
+    int alto = (int) cap.get(cv::CAP_PROP_FRAME_HEIGHT); // obtener la altura de los cuadros
+    char resolucion[20];
+    sprintf(resolucion, "%dx%d", ancho, alto);
+
+    int frame_index = 0;
+    cv::Mat frame, hsv_frame;
+    while (cap.read(frame)) {
+        // Guardamos el frame original en la carpeta correspondiente
+        std::string orig_frame_name = orig_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
+        cv::imwrite(orig_frame_name, frame);
+
+        // Guardamos el frame modificado en la carpeta correspondiente
+
+        cv::cvtColor(frame, hsv_frame, cv::COLOR_BGR2HSV);
+        std::vector<cv::Mat> hsv_channels;
+        cv::split(hsv_frame, hsv_channels);
+        cv::normalize(hsv_channels[0], hsv_channels[0], 0, 255, cv::NORM_MINMAX);
+        cv::normalize(hsv_channels[1], hsv_channels[1], 0, 255, cv::NORM_MINMAX);
+        cv::normalize(hsv_channels[2], hsv_channels[2], 0, 255, cv::NORM_MINMAX);
+        cv::merge(hsv_channels, hsv_frame);
+
+        std::string mod_frame_name = mod_frames_folder + "/" + std::to_string(frame_index) + ".jpg";
+        cv::imwrite(mod_frame_name, hsv_frame);
+
+        // Agregamos los frames a las listas correspondientes
+        original_frames.push_back(frame_index);
+        mod_frames.push_back(frame_index);
+
+        frame_index++;
+    }
+    cap.release();
+
+    auto it = mod_frames.begin();
+    while (std::distance(it, mod_frames.end()) >= 2) {
+        int frame1 = *it;
+        std::advance(it, 1);
+        int frame2 = *it;
+        sprintf(frameName1, "_modified_frames/%d.jpg", frame1);
+        sprintf(frameName2, "_modified_frames/%d.jpg", frame2);
+       
+        cv::Mat hsv1 = cv::imread(frameName1, cv::IMREAD_COLOR);
+        cv::Mat hsv2 = cv::imread(frameName2, cv::IMREAD_COLOR);
     
-        
         cv::MatND hist1, hist2;
-
-        
-        cv::calcHist(&img1, 1, channels, cv::Mat(), hist1, 2, histSize, ranges, true, false);
-        cv::calcHist(&img2, 1, channels, cv::Mat(), hist2, 2, histSize, ranges, true, false);
-        
+        cv::calcHist(&hsv1, 1, channels, cv::Mat(), hist1, 2, histSize, ranges, true, false);
+        cv::calcHist(&hsv2, 1, channels, cv::Mat(), hist2, 2, histSize, ranges, true, false);
 
         cv::normalize(hist1, hist1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
         cv::normalize(hist2, hist2, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
 
         btchr = cv::compareHist(hist1, hist2, cv::HISTCMP_BHATTACHARYYA);
-        
-          
-        
-        if (btchr > 0.6) { 
-            new_cut->cut_frame = temp_frame->index;
-            new_cut->next_cut = NULL;
-            add_cut(&all_cuts, new_cut);
+        printf("bthcr : %f ---- %s \n", btchr, frameName2);
+        if (btchr > 0.6) {
+            cuts.push_back(frame1);    
         }
-        temp_frame = temp_frame->next_frame;
+       
     }
 
-    //sort_cuts(&all_cuts);
+    auto it2 = cuts.begin();
+    while (it2 != cuts.end()) {
+        int frame = *it2;
+        clips_list.push_back(clips(ini, frame));
+        ini = frame;
+        ++it2;
+    }
+
+    if (ini < original_frames.back()){
+        clips_list.push_back(clips(ini,original_frames.back()));
+    }
+
+    cv::Mat img = cv::imread("_original_frames/0.jpg", cv::IMREAD_COLOR);
+
+    for (auto it = clips_list.begin(); it != clips_list.end(); ++it) {
+        createVideo(it->ini, it->fin, img.cols, img.rows);
+    }
+
+    fin = clock();
+    tiempo = ((double) (fin - inicio)) / CLOCKS_PER_SEC;
+    //double tiempo serial, double tiempo paralelo, int numero de procesos, char resolucion
+    txtSpeedup(tiempo, tiempo, 1, resolucion);
     
- 
-    temp_cut = all_cuts;
-    index = 0;
-    temp_index = 0;
-   
-    
-    while (temp_cut !=NULL) {
-        printf("Algo");
-        new_clip->first_frame = temp_index;
-        new_clip->last_frame = temp_cut->cut_frame;
-        new_clip->index = index;
-        sprintf(new_clip->name, "Video_%d-%d.mp4", new_clip->first_frame, new_clip->last_frame);
-        new_clip->next_clip = NULL;
-        add_clip(&all_clips, new_clip);
-        index++;
-        temp_index = temp_cut->cut_frame;
-        temp_cut = temp_cut->next_cut;
-    }
-
-    temp_clips = all_clips;
-     
-
-    char frameName[50];
-    sprintf(frameName, "_original_frames/%d.jpg", normal_frame_list->name);
-    cv::Mat img = cv::imread(frameName, cv::IMREAD_COLOR);
-
-    while (temp_clips != NULL) {
-        createVideo(temp_clips, img.cols, img.rows);
-        temp_clips = temp_clips->next_clip;
-    }
-}
+} 
